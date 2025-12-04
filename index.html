@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Virtual Drum — Main Drum Virtual</title>
+  <style>
+    :root{--bg:#0b0f14;--glass:rgba(255,255,255,0.03);--accent:#ff6b6b}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+    html,body{height:100%;margin:0}
+    body{background:#000;color:#fff}
+    .stage{position:fixed;inset:0;background-image:url('https://static.vecteezy.com/system/resources/previews/040/168/394/non_2x/ai-generated-empty-old-warehouse-with-industrial-loft-style-brick-wall-concrete-floor-black-steel-roof-photo.jpg');background-size:cover;background-position:center;filter:contrast(0.95) saturate(0.9)}
+    .overlay{position:fixed;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.45),rgba(0,0,0,0.65));display:flex;align-items:center;justify-content:center;padding:20px}
+    .app{width:100%;max-width:1100px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));backdrop-filter:blur(6px);border-radius:14px;padding:18px;box-shadow:0 12px 40px rgba(2,6,23,0.7)}
+    header{display:flex;align-items:center;gap:12px}
+    h1{margin:0;font-size:20px}
+    p.lead{margin:0;color:#cbd5e1}
+    .drumkit{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:16px}
+    .pad{position:relative;height:120px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.25);cursor:pointer;user-select:none}
+    .pad img{max-width:80%;max-height:80%}
+    .pad .label{position:absolute;left:8px;top:8px;background:rgba(0,0,0,0.4);padding:4px 8px;border-radius:6px;font-size:13px}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .panel{margin-top:14px;background:rgba(255,255,255,0.02);padding:12px;border-radius:10px}
+    label{font-size:14px}
+    input.keyinp{width:64px;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    button{padding:8px 10px;border-radius:10px;border:0;cursor:pointer}
+    .btn-primary{background:linear-gradient(90deg,#06b6d4,#7c3aed);color:#041018}
+    .small{font-size:13px;color:#9aa4b2}
+    .sources{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    @media (max-width:700px){.drumkit{grid-template-columns:repeat(3,1fr)} }
+  </style>
+</head>
+<body>
+  <div class="stage" aria-hidden="true"></div>
+  <div class="overlay">
+    <div class="app">
+      <header>
+        <div>
+          <h1>Virtual Drum — Main Drum Virtual</h1>
+          <p class="lead">Klik pad atau tekan key untuk main. Kamu bisa ganti key, upload gambar PNG (transparan) dan suara sendiri. Suara default synth (jelas & low-latency).</p>
+        </div>
+      </header>
+
+      <div class="drumkit" id="drumkit"></div>
+
+      <div class="controls">
+        <div class="panel" style="flex:1;min-width:280px">
+          <strong>Bindings & Upload</strong>
+          <div id="bindings" style="margin-top:8px"></div>
+          <div style="margin-top:8px" class="small">Tips: tekan field lalu tekan key fisik untuk set binding. File gambar harus PNG transparan ideal 512x512. File audio: WAV/MP3/OGG (short one-shot maks 2MB).</div>
+        </div>
+
+        <div class="panel" style="width:360px;min-width:240px">
+          <strong>Sumber aset rekomendasi</strong>
+          <div class="sources">
+            <div>
+              <div class="small"><strong>PNG/vektor (gratis):</strong></div>
+              <ul class="small">
+                <li><a href="https://pixabay.com/" target="_blank">Pixabay</a> — banyak PNG/vektor gratis. citeturn1search0</li>
+                <li><a href="https://www.vecteezy.com/" target="_blank">Vecteezy</a> — koleksi PNG drum. citeturn0search4</li>
+              </ul>
+            </div>
+            <div>
+              <div class="small"><strong>Suara drum (gratis/royalty-free):</strong></div>
+              <ul class="small">
+                <li><a href="https://freesound.org/" target="_blank">Freesound</a> — banyak one-shot (CC0/Creative Commons). Contoh hi-hat CC0. citeturn4view0</li>
+                <li><a href="https://99sounds.org/" target="_blank">99Sounds</a> — paket sampel drum berkualitas. citeturn0search3turn3search14</li>
+                <li><a href="https://pixabay.com/sound-effects/" target="_blank">Pixabay SFX</a> — koleksi kick/snare/hat royalty-free. citeturn3search6</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel small" style="margin-top:12px">Catatan: saya pakai WebAudio synth untuk suara default supaya langsung jelas, bebas delay, dan enggak perlu hosting file. Kalau mau, tinggal upload WAV/MP3 untuk tiap pad.</div>
+    </div>
+  </div>
+
+<script>
+// Drum parts default config
+const parts = [
+  { id:'kick', name:'Kick', key:'A' },
+  { id:'snare', name:'Snare', key:'S' },
+  { id:'hihat', name:'Hi-Hat', key:'D' },
+  { id:'tom1', name:'Tom 1', key:'F' },
+  { id:'tom2', name:'Tom 2', key:'G' },
+  { id:'crash', name:'Crash', key:'H' }
+];
+
+// Load saved bindings
+const saved = JSON.parse(localStorage.getItem('vd_bindings') || 'null');
+if(saved){
+  for(const p of parts){ if(saved[p.id] && saved[p.id].key) p.key = saved[p.id].key; if(saved[p.id] && saved[p.id].image) p.image = saved[p.id].image; if(saved[p.id] && saved[p.id].audio) p.audio = saved[p.id].audio; }
+}
+
+// Build UI
+const kit = document.getElementById('drumkit');
+for(const p of parts){
+  const d = document.createElement('div'); d.className='pad'; d.id='pad-'+p.id; d.tabIndex=0;
+  const lbl = document.createElement('div'); lbl.className='label'; lbl.innerText = p.name + ' ('+p.key.toUpperCase()+')'; d.appendChild(lbl);
+  const img = document.createElement('img'); img.alt=p.name; if(p.image) img.src = p.image; else img.style.display='none'; d.appendChild(img);
+  d.addEventListener('click', ()=>trigger(p.id));
+  kit.appendChild(d);
+}
+
+// Bindings editor
+const bindArea = document.getElementById('bindings');
+for(const p of parts){
+  const row = document.createElement('div'); row.style.display='flex'; row.style.gap='8px'; row.style.marginBottom='8px';
+  const title = document.createElement('div'); title.style.width='72px'; title.innerText=p.name;
+  const keyinp = document.createElement('input'); keyinp.className='keyinp'; keyinp.value=p.key; keyinp.setAttribute('data-id',p.id);
+  keyinp.addEventListener('keydown', (e)=>{ e.preventDefault(); const k = e.key.toUpperCase(); keyinp.value=k; p.key=k; updateLabel(p.id); saveAll(); });
+  const imgInp = document.createElement('input'); imgInp.type='file'; imgInp.accept='image/png'; imgInp.style.flex='1'; imgInp.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; const url=await toDataURL(f); p.image=url; document.querySelector('#pad-'+p.id+' img').src=url; document.querySelector('#pad-'+p.id+' img').style.display='block'; saveAll(); });
+  const audioInp = document.createElement('input'); audioInp.type='file'; audioInp.accept='audio/*'; audioInp.style.width='120px'; audioInp.addEventListener('change', async (e)=>{ const f=e.target.files[0]; if(!f) return; const url=await toDataURL(f); p.audio=url; saveAll(); });
+  row.appendChild(title); row.appendChild(keyinp); row.appendChild(imgInp); row.appendChild(audioInp);
+  bindArea.appendChild(row);
+}
+
+function updateLabel(id){ const p=parts.find(x=>x.id===id); const lbl=document.querySelector('#pad-'+id+' .label'); lbl.innerText = p.name + ' ('+p.key.toUpperCase()+')'; }
+function saveAll(){ const out={}; for(const p of parts) out[p.id]={key:p.key,image:p.image,audio:p.audio}; localStorage.setItem('vd_bindings',JSON.stringify(out)); }
+
+async function toDataURL(file){ return new Promise((res,rej)=>{ const reader=new FileReader(); reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); }); }
+
+// WebAudio setup for synth drum sounds
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioCtx();
+function playKick(time=0){ const t=audioCtx.currentTime+time; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t+0.25);
+ g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.001, t+0.5);
+ o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.6); }
+function playSnare(time=0){ const t=audioCtx.currentTime+time; // noise
+ const bufferSize = audioCtx.sampleRate * 0.2; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const data = buffer.getChannelData(0);
+ for(let i=0;i<bufferSize;i++) data[i]=(Math.random()*2-1)*Math.exp(-i/bufferSize*4);
+ const noise = audioCtx.createBufferSource(); noise.buffer = buffer; const noiseFilter = audioCtx.createBiquadFilter(); noiseFilter.type='bandpass'; noiseFilter.frequency.value=1800;
+ const noiseGain = audioCtx.createGain(); noiseGain.gain.setValueAtTime(1,t); noiseGain.gain.exponentialRampToValueAtTime(0.01,t+0.2);
+ noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+ noise.start(t); noise.stop(t+0.25);
+}
+function playHat(time=0){ const t=audioCtx.currentTime+time; const bufferSize = audioCtx.sampleRate*0.05; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const data = buffer.getChannelData(0); for(let i=0;i<bufferSize;i++) data[i]=(Math.random()*2-1)*Math.pow(1 - i/bufferSize, 3);
+ const src = audioCtx.createBufferSource(); src.buffer=buffer; const hp = audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=5000; const g=audioCtx.createGain(); g.gain.setValueAtTime(0.8,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.08);
+ src.connect(hp); hp.connect(g); g.connect(audioCtx.destination); src.start(t); src.stop(t+0.1);
+}
+function playTom(pitch=220,time=0){ const t=audioCtx.currentTime+time; const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.setValueAtTime(pitch,t); o.frequency.exponentialRampToValueAtTime(pitch*0.5,t+0.4);
+ g.gain.setValueAtTime(0.8,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.6);
+ o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.8);
+}
+function playCrash(time=0){ const t=audioCtx.currentTime+time; const bufferSize = audioCtx.sampleRate*0.8; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const data = buffer.getChannelData(0); for(let i=0;i<bufferSize;i++) data[i]=(Math.random()*2-1)*Math.pow(1 - i/bufferSize, 1.4);
+ const src = audioCtx.createBufferSource(); src.buffer=buffer; const lp = audioCtx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=8000; const g=audioCtx.createGain(); g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+1.2);
+ src.connect(lp); lp.connect(g); g.connect(audioCtx.destination); src.start(t); src.stop(t+1.4);
+}
+
+// Trigger function: if custom audio uploaded, play that instead
+function trigger(id){ const p = parts.find(x=>x.id===id);
+ // resume context on user gesture for some browsers
+ if(audioCtx.state==='suspended') audioCtx.resume();
+ if(p.audio){ // play custom audio via audio element
+   const el = new Audio(p.audio); el.currentTime=0; el.play();
+ } else {
+   // play synth
+   if(id==='kick') playKick();
+   else if(id==='snare') playSnare();
+   else if(id==='hihat') playHat();
+   else if(id==='tom1') playTom(300);
+   else if(id==='tom2') playTom(220);
+   else if(id==='crash') playCrash();
+ }
+ // visual flash
+ const pad = document.getElementById('pad-'+id);
+ pad.style.transform='scale(0.98)'; pad.style.boxShadow='0 8px 24px rgba(0,0,0,0.6) inset'; setTimeout(()=>{ pad.style.transform=''; pad.style.boxShadow=''; },120);
+}
+
+// Key handling
+window.addEventListener('keydown', (e)=>{
+  if(e.repeat) return;
+  const k = e.key.toUpperCase(); const p = parts.find(x=>x.key===k); if(p) trigger(p.id);
+});
+
+// Save bindings on unload
+window.addEventListener('beforeunload', saveAll);
+
+// expose save button? already autosaves on change
+
+</script>
+  <script>
+    // Extra hihat pads: close & open
+    const pads = [
+      { name: 'HiHat Close', key: 'Z', sound: 'hihat-close' },
+      { name: 'HiHat Open', key: 'X', sound: 'hihat-open' }
+    ];
+    // Update snare sound to Pixabay
+    const snareAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/09/30/audio_6f5e2be79a.mp3?filename=tr707-snare-drum-241412.mp3');
+  </script>
+</body>
+</html>
